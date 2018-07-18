@@ -36,7 +36,8 @@ type transacter struct {
 
 	conns       []*websocket.Conn
 	connsBroken []bool
-	wg          sync.WaitGroup
+	startingWg  sync.WaitGroup
+	endingWg    sync.WaitGroup
 	stopped     bool
 
 	logger log.Logger
@@ -75,19 +76,38 @@ func (t *transacter) Start() error {
 		t.conns[i] = c
 	}
 
-	t.wg.Add(2 * t.Connections)
+	t.startingWg.Add(t.Connections)
+	t.endingWg.Add(2 * t.Connections)
 	for i := 0; i < t.Connections; i++ {
 		go t.sendLoop(i)
 		go t.receiveLoop(i)
 	}
 
+	t.startingWg.Wait()
+
 	return nil
+}
+
+// WaitUntilAllConnectionsStartedFiringTxs waits until all of this
+// transacters connections have begun sending txs at the specified rate
+func (t *transacter) WaitUntilAllConnectionsStartedFiringTxs() {
+	for {
+		started := true
+		for i := 0; i < t.Connections; i++ {
+			if !t.connsStarted[i] && !t.connsBroken[i] {
+				started = false
+			}
+		}
+		if started {
+			break
+		}
+	}
 }
 
 // Stop closes the connections.
 func (t *transacter) Stop() {
 	t.stopped = true
-	t.wg.Wait()
+	t.endingWg.Wait()
 	for _, c := range t.conns {
 		c.Close()
 	}
@@ -97,7 +117,7 @@ func (t *transacter) Stop() {
 // `broadcast_tx_async`).
 func (t *transacter) receiveLoop(connIndex int) {
 	c := t.conns[connIndex]
-	defer t.wg.Done()
+	defer t.endingWg.Done()
 	for {
 		_, _, err := c.ReadMessage()
 		if err != nil {
@@ -118,6 +138,13 @@ func (t *transacter) receiveLoop(connIndex int) {
 
 // sendLoop generates transactions at a given rate.
 func (t *transacter) sendLoop(connIndex int) {
+	started := false
+	// Close the starting waitgroup, in the event that this fails to start
+	defer func() {
+		if !started {
+			t.startingWg.Done()
+		}
+	}()
 	c := t.conns[connIndex]
 
 	c.SetPingHandler(func(message string) error {
@@ -139,7 +166,7 @@ func (t *transacter) sendLoop(connIndex int) {
 	defer func() {
 		pingsTicker.Stop()
 		txsTicker.Stop()
-		t.wg.Done()
+		t.endingWg.Done()
 	}()
 
 	// hash of the host name is a part of each tx
@@ -149,6 +176,11 @@ func (t *transacter) sendLoop(connIndex int) {
 		hostname = "127.0.0.1"
 	}
 	hostnameHash = md5.Sum([]byte(hostname))
+	// each transaction embeds connection index, tx number and hash of the hostname
+	// we update the tx number between successive txs
+	tx := generateTx(connIndex, txNumber, t.Size, hostnameHash)
+	txHex := make([]byte, len(tx)*2)
+	hex.Encode(txHex, tx)
 
 	for {
 		select {
@@ -156,18 +188,23 @@ func (t *transacter) sendLoop(connIndex int) {
 			startTime := time.Now()
 			endTime := startTime.Add(time.Second)
 			numTxSent := t.Rate
+			if !started {
+				t.startingWg.Done()
+				started = true
+			}
 
+			now := time.Now()
 			for i := 0; i < t.Rate; i++ {
-				// each transaction embeds connection index, tx number and hash of the hostname
-				tx := generateTx(connIndex, txNumber, t.Size, hostnameHash)
-				paramsJSON, err := json.Marshal(map[string]interface{}{"tx": hex.EncodeToString(tx)})
+				// update tx number of the tx, and the corresponding hex
+				updateTx(tx, txHex, txNumber)
+				paramsJSON, err := json.Marshal(map[string]interface{}{"tx": txHex})
 				if err != nil {
 					fmt.Printf("failed to encode params: %v\n", err)
 					os.Exit(1)
 				}
 				rawParamsJSON := json.RawMessage(paramsJSON)
 
-				c.SetWriteDeadline(time.Now().Add(sendTimeout))
+				c.SetWriteDeadline(now.Add(sendTimeout))
 				err = c.WriteJSON(rpctypes.RPCRequest{
 					JSONRPC: "2.0",
 					ID:      "tm-bench",
@@ -182,9 +219,10 @@ func (t *transacter) sendLoop(connIndex int) {
 					return
 				}
 
-				// Time added here is 7.13 ns/op, not significant enough to worry about
-				if i%20 == 0 {
-					if time.Now().After(endTime) {
+				// cache the time.Now() reads to save time.
+				if i%5 == 0 {
+					now = time.Now()
+					if now.After(endTime) {
 						// Plus one accounts for sending this tx
 						numTxSent = i + 1
 						break
@@ -249,4 +287,14 @@ func generateTx(connIndex int, txNumber int, txSize int, hostnameHash [md5.Size]
 	}
 
 	return tx
+}
+
+// warning, mutates input byte slice
+func updateTx(tx []byte, txHex []byte, txNumber int) {
+	binary.PutUvarint(tx[8:16], uint64(txNumber))
+	hexUpdate := make([]byte, 16)
+	hex.Encode(hexUpdate, tx[8:16])
+	for i := 16; i < 32; i++ {
+		txHex[i] = hexUpdate[i-16]
+	}
 }
