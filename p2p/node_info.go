@@ -27,13 +27,19 @@ type NodeInfo struct {
 
 	// Check compatibility.
 	// Channels are HexBytes so easier to read as JSON
-	Network  string       `json:"network"`  // network/chain ID
-	Version  string       `json:"version"`  // major.minor.revision
+	Version  Version      `json:"version"`  // version info, including chain ID
 	Channels cmn.HexBytes `json:"channels"` // channels this node knows about
 
 	// ASCIIText fields
 	Moniker string   `json:"moniker"` // arbitrary moniker
 	Other   []string `json:"other"`   // other application specific data
+}
+
+type Version struct {
+	ChainID      string `json:"chain_id"`
+	BlockVersion int64  `json:"block_version"`
+	P2PVersion   int64  `json:"p2p_version"`
+	AppVersion   int64  `json:"app_version"`
 }
 
 // Validate checks the self-reported NodeInfo is safe.

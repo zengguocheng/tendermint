@@ -11,6 +11,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/crypto/tmhash"
 	cmn "github.com/tendermint/tendermint/libs/common"
+	"github.com/tendermint/tendermint/version"
 )
 
 // Block defines the atomic unit of a Tendermint blockchain.
@@ -191,11 +192,22 @@ func (b *Block) StringShort() string {
 
 //-----------------------------------------------------------------------------
 
+// Version contains the full version for a  blockchain,
+// including the chain identifier, the version of the blockchain
+// data structures, and the version of the application state machine.
+// It also allows proposers to signal for upgrades to new versions via
+// the ProtocolVersion.Next field.
+type Version struct {
+	BlockVersion version.ProtocolVersion `json:"block_version"`
+	AppVersion   version.ProtocolVersion `json:"app_version"`
+}
+
 // Header defines the structure of a Tendermint block header
 // TODO: limit header size
-// NOTE: changes to the Header should be duplicated in the abci Header
+// NOTE: changes to the Header MUST be duplicated in the abci Header
 type Header struct {
 	// basic block info
+	Version  Version   `json:"version"`
 	ChainID  string    `json:"chain_id"`
 	Height   int64     `json:"height"`
 	Time     time.Time `json:"time"`
@@ -230,6 +242,7 @@ func (h *Header) Hash() cmn.HexBytes {
 		return nil
 	}
 	return merkle.SimpleHashFromMap(map[string]merkle.Hasher{
+		"Version":        aminoHasher(h.Version),
 		"ChainID":        aminoHasher(h.ChainID),
 		"Height":         aminoHasher(h.Height),
 		"Time":           aminoHasher(h.Time),
@@ -240,8 +253,8 @@ func (h *Header) Hash() cmn.HexBytes {
 		"Data":           aminoHasher(h.DataHash),
 		"Validators":     aminoHasher(h.ValidatorsHash),
 		"NextValidators": aminoHasher(h.NextValidatorsHash),
-		"App":            aminoHasher(h.AppHash),
 		"Consensus":      aminoHasher(h.ConsensusHash),
+		"App":            aminoHasher(h.AppHash),
 		"Results":        aminoHasher(h.LastResultsHash),
 		"Evidence":       aminoHasher(h.EvidenceHash),
 		"Proposer":       aminoHasher(h.ProposerAddress),
@@ -254,6 +267,7 @@ func (h *Header) StringIndented(indent string) string {
 		return "nil-Header"
 	}
 	return fmt.Sprintf(`Header{
+%s  Version:        %v
 %s  ChainID:        %v
 %s  Height:         %v
 %s  Time:           %v
@@ -264,12 +278,13 @@ func (h *Header) StringIndented(indent string) string {
 %s  Data:           %v
 %s  Validators:     %v
 %s  NextValidators: %v
-%s  App:            %v
 %s  Consensus:       %v
+%s  App:            %v
 %s  Results:        %v
 %s  Evidence:       %v
 %s  Proposer:       %v
 %s}#%v`,
+		indent, h.Version,
 		indent, h.ChainID,
 		indent, h.Height,
 		indent, h.Time,
@@ -280,8 +295,8 @@ func (h *Header) StringIndented(indent string) string {
 		indent, h.DataHash,
 		indent, h.ValidatorsHash,
 		indent, h.NextValidatorsHash,
-		indent, h.AppHash,
 		indent, h.ConsensusHash,
+		indent, h.AppHash,
 		indent, h.LastResultsHash,
 		indent, h.EvidenceHash,
 		indent, h.ProposerAddress,
