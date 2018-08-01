@@ -8,6 +8,8 @@ import (
 
 	"github.com/tendermint/tendermint/config"
 	crypto "github.com/tendermint/tendermint/crypto"
+	cmn "github.com/tendermint/tendermint/libs/common"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/p2p/conn"
 )
 
@@ -214,13 +216,8 @@ func (mt *multiplexTransport) wrapPeer(
 
 	mt.peers[c] = ni
 
-	return &multiplexPeer{
-		onStop: func() {
-			fmt.Println("onStop")
-			delete(mt.peers, c)
-			_ = c.Close()
-		},
-		peer: newPeer(
+	return newMultiplexPeer(
+		newPeer(
 			pc,
 			mt.mConfig,
 			ni,
@@ -228,7 +225,12 @@ func (mt *multiplexTransport) wrapPeer(
 			cfg.chDescs,
 			cfg.onPeerError,
 		),
-	}
+		func() {
+			fmt.Println("onStop")
+			delete(mt.peers, c)
+			_ = c.Close()
+		},
+	)
 }
 
 func handshake(
@@ -316,11 +318,36 @@ func upgrade(
 // shutdown of the peer. It should ultimately grow into the proper
 // implementation.
 type multiplexPeer struct {
+	cmn.BaseService
 	*peer
+
 	onStop func()
+}
+
+func newMultiplexPeer(p *peer, onStop func()) *multiplexPeer {
+	mp := &multiplexPeer{
+		onStop: onStop,
+		peer:   p,
+	}
+
+	mp.BaseService = *cmn.NewBaseService(nil, "MultiplexPeer", mp)
+
+	return mp
+}
+
+func (mp *multiplexPeer) OnStart() error {
+	return mp.peer.OnStart()
 }
 
 func (mp *multiplexPeer) OnStop() {
 	mp.onStop()
 	mp.peer.OnStop()
+}
+
+func (mp *multiplexPeer) SetLogger(logger log.Logger) {
+	mp.peer.SetLogger(logger)
+}
+
+func (mp *multiplexPeer) String() string {
+	return mp.peer.String()
 }

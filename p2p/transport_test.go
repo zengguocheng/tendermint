@@ -19,8 +19,7 @@ func TestTransportAcceptDial(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = mt.Listen(*addr)
-	if err != nil {
+	if err := mt.Listen(*addr); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,6 +54,11 @@ func TestTransportAcceptDial(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Test that we keep track of the Peer.
+	if have, want := len(mt.peers), 1; have != want {
+		t.Errorf("have %v, want %v", have, want)
+	}
+
 	err = p.Start()
 	if err != nil {
 		t.Fatal(err)
@@ -65,8 +69,13 @@ func TestTransportAcceptDial(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Test that we successfully removed the peer after its lifecycle is complete.
 	if have, want := len(mt.peers), 0; have != want {
 		t.Errorf("have %v, want %v", have, want)
+	}
+
+	if err := mt.Close(); err != nil {
+		t.Errorf("close errored: %v", err)
 	}
 }
 
