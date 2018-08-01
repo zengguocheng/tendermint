@@ -13,7 +13,7 @@ import (
 
 const (
 	defaultDialTimeout      = time.Second
-	defaultHandshakeTimeout = 3 * time.Millisecond
+	defaultHandshakeTimeout = 3 * time.Second
 )
 
 // accept is the container to carry the upgraded connection and NodeInfo from an
