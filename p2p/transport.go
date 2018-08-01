@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"time"
 
@@ -10,7 +11,12 @@ import (
 	"github.com/tendermint/tendermint/p2p/conn"
 )
 
-// accept is the container to carry the upgrade connection and nodeInfo from
+const (
+	defaultDialTimeout      = time.Second
+	defaultHandshakeTimeout = 3 * time.Millisecond
+)
+
+// accept is the container to carry the upgraded connection and NodeInfo from an
 // asynchronously running routine to the Accept method.
 type accept struct {
 	conn     net.Conn
@@ -63,8 +69,8 @@ type multiplexTransport struct {
 	nodeKey          NodeKey
 
 	// TODO(xla): Those configs are still needed as we parameterise peerConn and
-	// peer currently. All relevant options should be refactored into options with
-	// sane defaults.
+	// peer currently. All relevant configuration should be refactored into options
+	// with sane defaults.
 	mConfig   conn.MConnConfig
 	p2pConfig config.P2PConfig
 }
@@ -74,10 +80,15 @@ var _ Transport = (*multiplexTransport)(nil)
 var _ transportLifecycle = (*multiplexTransport)(nil)
 
 // NewMultiplexTransport returns a tcp conencted multiplexed peers.
-func NewMultiplexTransport() *multiplexTransport {
+func NewMultiplexTransport(nodeKey NodeKey) *multiplexTransport {
 	return &multiplexTransport{
-		acceptc: make(chan accept),
-		closec:  make(chan struct{}),
+		acceptc:          make(chan accept),
+		closec:           make(chan struct{}),
+		dialTimeout:      defaultDialTimeout,
+		handshakeTimeout: defaultHandshakeTimeout,
+		mConfig:          conn.DefaultMConnConfig(),
+		nodeKey:          nodeKey,
+		peers:            map[net.Conn]NodeInfo{},
 	}
 }
 
@@ -158,6 +169,10 @@ func (mt *multiplexTransport) acceptPeers() {
 			return
 		}
 
+		// Connection upgrade should be asynchronous to avoid Head-of-line blocking[0]
+		// Reference:  https://github.com/tendermint/tendermint/issues/2047
+		//
+		// [0] https://en.wikipedia.org/wiki/Head-of-line_blocking
 		go func(conn net.Conn) {
 			c, ni, err := upgrade(
 				c,
@@ -201,7 +216,9 @@ func (mt *multiplexTransport) wrapPeer(
 
 	return &multiplexPeer{
 		onStop: func() {
+			fmt.Println("onStop")
 			delete(mt.peers, c)
+			_ = c.Close()
 		},
 		peer: newPeer(
 			pc,
@@ -283,12 +300,12 @@ func upgrade(
 
 	c, err := secretConn(conn, timeout, privKey)
 	if err != nil {
-		return nil, NodeInfo{}, err
+		return nil, NodeInfo{}, fmt.Errorf("secrect conn failed: %v", err)
 	}
 
 	ni, err = handshake(c, timeout, nodeInfo)
 	if err != nil {
-		return nil, NodeInfo{}, err
+		return nil, NodeInfo{}, fmt.Errorf("handshake failed: %v", err)
 	}
 
 	return c, ni, nil
@@ -296,7 +313,7 @@ func upgrade(
 
 // multiplexPeer is the Peer implementation returned by the multiplexTransport
 // and wraps the default peer implementation for now, with an added hook for
-// shutdown of the a peer. It should ultimately grow into the proper
+// shutdown of the peer. It should ultimately grow into the proper
 // implementation.
 type multiplexPeer struct {
 	*peer
