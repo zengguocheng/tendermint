@@ -85,7 +85,7 @@ func TestBeginBlockValidators(t *testing.T) {
 
 		// -> app receives a list of validators with a bool indicating if they signed
 		ctr := 0
-		for i, v := range app.Validators {
+		for i, v := range app.CommitVotes {
 			if ctr < len(tc.expectedAbsentValidators) &&
 				tc.expectedAbsentValidators[ctr] == i {
 
@@ -159,7 +159,7 @@ func TestUpdateValidators(t *testing.T) {
 		name string
 
 		currentSet  *types.ValidatorSet
-		abciUpdates []abci.Validator
+		abciUpdates []abci.ValidatorUpdate
 
 		resultingSet *types.ValidatorSet
 		shouldErr    bool
@@ -168,7 +168,7 @@ func TestUpdateValidators(t *testing.T) {
 			"adding a validator is OK",
 
 			types.NewValidatorSet([]*types.Validator{val1}),
-			[]abci.Validator{{Address: []byte{}, PubKey: types.TM2PB.PubKey(pubkey2), Power: 20}},
+			[]abci.ValidatorUpdate{{PubKey: types.TM2PB.PubKey(pubkey2), Power: 20}},
 
 			types.NewValidatorSet([]*types.Validator{val1, val2}),
 			false,
@@ -177,7 +177,7 @@ func TestUpdateValidators(t *testing.T) {
 			"updating a validator is OK",
 
 			types.NewValidatorSet([]*types.Validator{val1}),
-			[]abci.Validator{{Address: []byte{}, PubKey: types.TM2PB.PubKey(pubkey1), Power: 20}},
+			[]abci.ValidatorUpdate{{PubKey: types.TM2PB.PubKey(pubkey1), Power: 20}},
 
 			types.NewValidatorSet([]*types.Validator{types.NewValidator(pubkey1, 20)}),
 			false,
@@ -186,7 +186,7 @@ func TestUpdateValidators(t *testing.T) {
 			"removing a validator is OK",
 
 			types.NewValidatorSet([]*types.Validator{val1, val2}),
-			[]abci.Validator{{Address: []byte{}, PubKey: types.TM2PB.PubKey(pubkey2), Power: 0}},
+			[]abci.ValidatorUpdate{{PubKey: types.TM2PB.PubKey(pubkey2), Power: 0}},
 
 			types.NewValidatorSet([]*types.Validator{val1}),
 			false,
@@ -196,7 +196,7 @@ func TestUpdateValidators(t *testing.T) {
 			"removing a non-existing validator results in error",
 
 			types.NewValidatorSet([]*types.Validator{val1}),
-			[]abci.Validator{{Address: []byte{}, PubKey: types.TM2PB.PubKey(pubkey2), Power: 0}},
+			[]abci.ValidatorUpdate{{PubKey: types.TM2PB.PubKey(pubkey2), Power: 0}},
 
 			types.NewValidatorSet([]*types.Validator{val1}),
 			true,
@@ -206,7 +206,7 @@ func TestUpdateValidators(t *testing.T) {
 			"adding a validator with negative power results in error",
 
 			types.NewValidatorSet([]*types.Validator{val1}),
-			[]abci.Validator{{Address: []byte{}, PubKey: types.TM2PB.PubKey(pubkey2), Power: -100}},
+			[]abci.ValidatorUpdate{{PubKey: types.TM2PB.PubKey(pubkey2), Power: -100}},
 
 			types.NewValidatorSet([]*types.Validator{val1}),
 			true,
@@ -280,7 +280,7 @@ var _ abci.Application = (*testApp)(nil)
 type testApp struct {
 	abci.BaseApplication
 
-	Validators          []abci.SigningValidator
+	CommitVotes         []abci.VoteInfo
 	ByzantineValidators []abci.Evidence
 }
 
@@ -293,7 +293,7 @@ func (app *testApp) Info(req abci.RequestInfo) (resInfo abci.ResponseInfo) {
 }
 
 func (app *testApp) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	app.Validators = req.LastCommitInfo.Validators
+	app.CommitVotes = req.LastCommitInfo.CommitVotes
 	app.ByzantineValidators = req.ByzantineValidators
 	return abci.ResponseBeginBlock{}
 }
