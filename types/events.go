@@ -4,26 +4,28 @@ import (
 	"fmt"
 
 	amino "github.com/tendermint/go-amino"
+	abci "github.com/tendermint/tendermint/abci/types"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
 	tmquery "github.com/tendermint/tendermint/libs/pubsub/query"
 )
 
 // Reserved event types
 const (
-	EventCompleteProposal  = "CompleteProposal"
-	EventLock              = "Lock"
-	EventNewBlock          = "NewBlock"
-	EventNewBlockHeader    = "NewBlockHeader"
-	EventNewRound          = "NewRound"
-	EventNewRoundStep      = "NewRoundStep"
-	EventPolka             = "Polka"
-	EventRelock            = "Relock"
-	EventTimeoutPropose    = "TimeoutPropose"
-	EventTimeoutWait       = "TimeoutWait"
-	EventTx                = "Tx"
-	EventUnlock            = "Unlock"
-	EventVote              = "Vote"
-	EventProposalHeartbeat = "ProposalHeartbeat"
+	EventCompleteProposal    = "CompleteProposal"
+	EventLock                = "Lock"
+	EventNewBlock            = "NewBlock"
+	EventNewBlockHeader      = "NewBlockHeader"
+	EventNewRound            = "NewRound"
+	EventNewRoundStep        = "NewRoundStep"
+	EventPolka               = "Polka"
+	EventProposalHeartbeat   = "ProposalHeartbeat"
+	EventRelock              = "Relock"
+	EventTimeoutPropose      = "TimeoutPropose"
+	EventTimeoutWait         = "TimeoutWait"
+	EventTx                  = "Tx"
+	EventUnlock              = "Unlock"
+	EventValidatorSetUpdates = "ValidatorSetUpdates"
+	EventVote                = "Vote"
 )
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -32,17 +34,8 @@ const (
 
 // implements events.EventData
 type TMEventData interface {
-	AssertIsTMEventData()
 	// empty interface
 }
-
-func (_ EventDataNewBlock) AssertIsTMEventData()          {}
-func (_ EventDataNewBlockHeader) AssertIsTMEventData()    {}
-func (_ EventDataTx) AssertIsTMEventData()                {}
-func (_ EventDataRoundState) AssertIsTMEventData()        {}
-func (_ EventDataVote) AssertIsTMEventData()              {}
-func (_ EventDataProposalHeartbeat) AssertIsTMEventData() {}
-func (_ EventDataString) AssertIsTMEventData()            {}
 
 func RegisterEventDatas(cdc *amino.Codec) {
 	cdc.RegisterInterface((*TMEventData)(nil), nil)
@@ -52,6 +45,7 @@ func RegisterEventDatas(cdc *amino.Codec) {
 	cdc.RegisterConcrete(EventDataRoundState{}, "tendermint/event/RoundState", nil)
 	cdc.RegisterConcrete(EventDataVote{}, "tendermint/event/Vote", nil)
 	cdc.RegisterConcrete(EventDataProposalHeartbeat{}, "tendermint/event/ProposalHeartbeat", nil)
+	cdc.RegisterConcrete(EventDataValidatorSetUpdates{}, "tendermint/event/ValidatorSetUpdates", nil)
 	cdc.RegisterConcrete(EventDataString(""), "tendermint/event/ProposalString", nil)
 }
 
@@ -92,6 +86,10 @@ type EventDataVote struct {
 
 type EventDataString string
 
+type EventDataValidatorSetUpdates struct {
+	ValidatorUpdates []abci.ValidatorUpdate `json:"validator_updates"`
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // PUBSUB
 ///////////////////////////////////////////////////////////////////////////////
@@ -108,20 +106,21 @@ const (
 )
 
 var (
-	EventQueryNewBlock          = QueryForEvent(EventNewBlock)
-	EventQueryNewBlockHeader    = QueryForEvent(EventNewBlockHeader)
-	EventQueryNewRound          = QueryForEvent(EventNewRound)
-	EventQueryNewRoundStep      = QueryForEvent(EventNewRoundStep)
-	EventQueryTimeoutPropose    = QueryForEvent(EventTimeoutPropose)
-	EventQueryCompleteProposal  = QueryForEvent(EventCompleteProposal)
-	EventQueryPolka             = QueryForEvent(EventPolka)
-	EventQueryUnlock            = QueryForEvent(EventUnlock)
-	EventQueryLock              = QueryForEvent(EventLock)
-	EventQueryRelock            = QueryForEvent(EventRelock)
-	EventQueryTimeoutWait       = QueryForEvent(EventTimeoutWait)
-	EventQueryVote              = QueryForEvent(EventVote)
-	EventQueryProposalHeartbeat = QueryForEvent(EventProposalHeartbeat)
-	EventQueryTx                = QueryForEvent(EventTx)
+	EventQueryCompleteProposal    = QueryForEvent(EventCompleteProposal)
+	EventQueryLock                = QueryForEvent(EventLock)
+	EventQueryNewBlock            = QueryForEvent(EventNewBlock)
+	EventQueryNewBlockHeader      = QueryForEvent(EventNewBlockHeader)
+	EventQueryNewRound            = QueryForEvent(EventNewRound)
+	EventQueryNewRoundStep        = QueryForEvent(EventNewRoundStep)
+	EventQueryPolka               = QueryForEvent(EventPolka)
+	EventQueryProposalHeartbeat   = QueryForEvent(EventProposalHeartbeat)
+	EventQueryRelock              = QueryForEvent(EventRelock)
+	EventQueryTimeoutPropose      = QueryForEvent(EventTimeoutPropose)
+	EventQueryTimeoutWait         = QueryForEvent(EventTimeoutWait)
+	EventQueryTx                  = QueryForEvent(EventTx)
+	EventQueryUnlock              = QueryForEvent(EventUnlock)
+	EventQueryValidatorSetUpdates = QueryForEvent(EventValidatorSetUpdates)
+	EventQueryVote                = QueryForEvent(EventVote)
 )
 
 func EventQueryTxFor(tx Tx) tmpubsub.Query {
@@ -137,6 +136,7 @@ type BlockEventPublisher interface {
 	PublishEventNewBlock(block EventDataNewBlock) error
 	PublishEventNewBlockHeader(header EventDataNewBlockHeader) error
 	PublishEventTx(EventDataTx) error
+	PublishEventValidatorSetUpdates(EventDataValidatorSetUpdates) error
 }
 
 type TxEventPublisher interface {

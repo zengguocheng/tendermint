@@ -384,6 +384,11 @@ func fireEvents(logger log.Logger, eventBus types.BlockEventPublisher, block *ty
 			Result: *(abciResponses.DeliverTx[i]),
 		}})
 	}
+
+	if len(abciResponses.EndBlock.ValidatorUpdates) > 0 {
+		eventBus.PublishEventValidatorSetUpdates(
+			types.EventDataValidatorSetUpdates{ValidatorUpdates: abciResponses.EndBlock.ValidatorUpdates})
+	}
 }
 
 //----------------------------------------------------------------------------------------------------

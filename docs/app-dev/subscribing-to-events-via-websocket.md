@@ -26,3 +26,34 @@ more information on query syntax and other options.
 You can also use tags, given you had included them into DeliverTx
 response, to query transaction results. See [Indexing
 transactions](./indexing-transactions.md) for details.
+
+### ValidatorSetUpdates
+
+When validator set changes, ValidatorSetUpdates event is published. The
+event carries a list of pubkey/power pairs. The list is the same
+Tendermint receives from ABCI application (see [EndBlock
+section](https://tendermint.com/docs/app-dev/abci-spec.html#endblock) in
+the ABCI spec).
+
+Response:
+
+```
+{
+    "jsonrpc": "2.0",
+    "id": "0#event",
+    "result": {
+        "query": "tm.event='ValidatorSetUpdates'",
+        "data": {
+            "type": "tendermint/event/ValidatorSetUpdates",
+            "value": {
+              "validator_updates": [
+                {
+                  "pubkey": {"type": "ed25519", "data": "...."},
+                  "power": 10
+                }
+              ]
+            }
+        }
+    }
+}
+```
