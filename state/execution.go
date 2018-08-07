@@ -243,7 +243,7 @@ func getBeginBlockValidatorInfo(block *types.Block, lastValSet *types.ValidatorS
 	// determine which validators did not sign last block.
 	signVals := make([]abci.SigningValidator, len(lastValSet.Validators))
 	for i, val := range lastValSet.Validators {
-		var vote *types.Vote
+		var vote *types.CommitSig
 		if i < len(block.LastCommit.Precommits) {
 			vote = block.LastCommit.Precommits[i]
 		}

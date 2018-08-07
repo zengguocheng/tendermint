@@ -24,11 +24,11 @@ import (
 	dbm "github.com/tendermint/tendermint/libs/db"
 
 	cfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	sm "github.com/tendermint/tendermint/state"
 	"github.com/tendermint/tendermint/types"
-	"github.com/tendermint/tendermint/libs/log"
 )
 
 var consensusReplayConfig *cfg.Config
@@ -533,7 +533,7 @@ func makeBlockchainFromWAL(wal WAL) ([]*types.Block, []*types.Commit, error) {
 				if block.Height != height+1 {
 					panic(cmn.Fmt("read bad block from wal. got height %d, expected %d", block.Height, height+1))
 				}
-				commitHeight := thisBlockCommit.Precommits[0].Height
+				commitHeight := thisBlockCommit.Height()
 				if commitHeight != height+1 {
 					panic(cmn.Fmt("commit doesnt match. got height %d, expected %d", commitHeight, height+1))
 				}
@@ -551,8 +551,15 @@ func makeBlockchainFromWAL(wal WAL) ([]*types.Block, []*types.Commit, error) {
 		case *types.Vote:
 			if p.Type == types.VoteTypePrecommit {
 				thisBlockCommit = &types.Commit{
-					BlockID:    p.BlockID,
-					Precommits: []*types.Vote{p},
+					BlockID: p.BlockID,
+					Precommits: []*types.CommitSig{
+						&types.CommitSig{
+							Signature: p.Signature,
+							Timestamp: p.Timestamp,
+						},
+					},
+					HeightNum: p.Height,
+					RoundNum:  p.Round,
 				}
 			}
 		}
@@ -566,7 +573,7 @@ func makeBlockchainFromWAL(wal WAL) ([]*types.Block, []*types.Commit, error) {
 	if block.Height != height+1 {
 		panic(cmn.Fmt("read bad block from wal. got height %d, expected %d", block.Height, height+1))
 	}
-	commitHeight := thisBlockCommit.Precommits[0].Height
+	commitHeight := thisBlockCommit.Height()
 	if commitHeight != height+1 {
 		panic(cmn.Fmt("commit doesnt match. got height %d, expected %d", commitHeight, height+1))
 	}
